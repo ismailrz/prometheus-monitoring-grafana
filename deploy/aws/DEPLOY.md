@@ -87,31 +87,13 @@ Minimum IAM permissions needed: EC2, VPC, RDS, SSM, IAM (for instance profile).
 
 ### 1. Set your GitHub repository URL
 
-Your code is already on GitHub. Just update the clone URL in the bootstrap script so EC2 pulls from your repo:
+Your code is already on GitHub. The bootstrap script is pre-configured to clone from:
 
-```bash
-# Get your repo URL
-git remote get-url origin
-# e.g. https://github.com/YOUR_USERNAME/prometheus-monitoring-grafana.git
+```
+https://github.com/ismailrz/prometheus-monitoring-grafana.git
 ```
 
-Open `deploy/aws/ec2-userdata.sh` and replace the placeholder on the `git clone` line:
-
-```bash
-# Before:
-git clone https://github.com/YOUR_USERNAME/prometheus-monitoring-grafana.git "$APP_DIR"
-
-# After (paste your actual URL):
-git clone https://github.com/yourusername/prometheus-monitoring-grafana.git "$APP_DIR"
-```
-
-Then commit and push that one-line change:
-
-```bash
-git add deploy/aws/ec2-userdata.sh
-git commit -m "set repo url in ec2 bootstrap script"
-git push
-```
+No changes needed — proceed directly to step 2.
 
 ### 2. Configure Terraform variables
 

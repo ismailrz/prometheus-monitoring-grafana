@@ -46,7 +46,7 @@ echo "Docker $(docker --version) installed."
 # 3. Clone the repository
 # ─────────────────────────────────────────────────
 APP_DIR=/opt/prometheus-stack
-git clone https://github.com/YOUR_USERNAME/prometheus-monitoring-grafana.git "$APP_DIR" \
+git clone https://github.com/ismailrz/prometheus-monitoring-grafana.git "$APP_DIR" \
   || (cd "$APP_DIR" && git pull)
 
 # ─────────────────────────────────────────────────
