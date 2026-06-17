@@ -1,0 +1,12 @@
+# Local terraform state — never commit
+terraform.tfstate
+terraform.tfstate.backup
+terraform.tfstate.*.backup
+
+# Variable files with real credentials
+terraform.tfvars
+*.auto.tfvars
+
+# Terraform working directories
+.terraform/
+.terraform.lock.hcl

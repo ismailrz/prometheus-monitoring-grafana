@@ -1,0 +1,25 @@
+# terraform.tfvars.example
+# Copy to terraform.tfvars and fill in real values.
+# Never commit terraform.tfvars to version control.
+
+project     = "prom-stack"
+environment = "production"
+aws_region  = "us-east-1"
+
+# EC2 — t3.medium = 2 vCPU / 4 GB RAM (~$30/mo)
+#        t3.large  = 2 vCPU / 8 GB RAM (~$60/mo) — recommended
+instance_type = "t3.large"
+
+# Your current public IP: run `curl -s ifconfig.me` to get it
+operator_cidr = "YOUR_IP/32"
+
+# Path to your SSH public key
+ssh_public_key_path = "~/.ssh/id_rsa.pub"
+
+# Secrets — use a password manager; never hard-code in CI
+postgres_password = "CHANGE_ME_strong_password"
+grafana_password  = "CHANGE_ME_strong_password"
+
+# Set to true to use RDS instead of containerised Postgres
+# RDS db.t3.micro adds ~$15/mo but gives managed backups + Multi-AZ option
+use_rds = false
