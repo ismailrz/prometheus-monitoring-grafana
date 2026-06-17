@@ -1,0 +1,130 @@
+groups:
+  - name: application
+    interval: 30s
+    rules:
+      # High error rate
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status_code=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total[5m]))
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          team:     backend
+        annotations:
+          summary:     "High HTTP error rate ({{ $value | humanizePercentage }})"
+          description: "More than 5% of requests are returning 5xx errors."
+          runbook:     "Check backend logs: docker compose logs -f backend"
+
+      # High latency P95
+      - alert: HighP95Latency
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(http_request_duration_seconds_bucket[5m]))
+          ) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+          team:     backend
+        annotations:
+          summary:     "P95 latency is {{ $value | humanizeDuration }}"
+          description: "95th percentile response time exceeds 1 second."
+
+      # Backend down
+      - alert: BackendDown
+        expr: up{job="backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team:     backend
+        annotations:
+          summary:     "Backend service is down"
+          description: "Prometheus cannot scrape the backend. Service may be crashed."
+
+      # No requests (dead service)
+      - alert: NoIncomingTraffic
+        expr: sum(rate(http_requests_total[5m])) == 0
+        for: 10m
+        labels:
+          severity: warning
+          team:     backend
+        annotations:
+          summary:     "No HTTP traffic for 10 minutes"
+          description: "The backend has received zero requests for 10 minutes. Service may be unhealthy."
+
+      # High in-flight requests (possible overload)
+      - alert: HighInFlightRequests
+        expr: http_requests_in_flight > 100
+        for: 2m
+        labels:
+          severity: warning
+          team:     backend
+        annotations:
+          summary:     "High number of in-flight requests ({{ $value }})"
+          description: "More than 100 requests are being processed simultaneously."
+
+      # DB query errors
+      - alert: HighDatabaseErrorRate
+        expr: sum(rate(db_query_errors_total[5m])) > 0.5
+        for: 2m
+        labels:
+          severity: warning
+          team:     backend
+        annotations:
+          summary:     "Database query errors ({{ $value | humanize }}/s)"
+          description: "Database query error rate is elevated."
+
+      # DB query slow
+      - alert: SlowDatabaseQueries
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, operation, table) (rate(db_query_duration_seconds_bucket[5m]))
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          team:     backend
+        annotations:
+          summary:     "Slow DB queries on {{ $labels.table }} ({{ $labels.operation }})"
+          description: "P95 DB query duration exceeded 500ms."
+
+  - name: database
+    rules:
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          team:     dba
+        annotations:
+          summary:     "PostgreSQL is down"
+          description: "The postgres_exporter cannot connect to PostgreSQL."
+
+      - alert: PostgresHighConnections
+        expr: |
+          pg_stat_activity_count
+          / pg_settings_max_connections
+          > 0.80
+        for: 5m
+        labels:
+          severity: warning
+          team:     dba
+        annotations:
+          summary:     "PostgreSQL connections at {{ $value | humanizePercentage }} of max"
+          description: "Connection pool is over 80% capacity."
+
+      - alert: PostgresLowCacheHitRatio
+        expr: |
+          pg_stat_database_blks_hit_total
+          / (pg_stat_database_blks_hit_total + pg_stat_database_blks_read_total + 1)
+          < 0.90
+        for: 10m
+        labels:
+          severity: warning
+          team:     dba
+        annotations:
+          summary:     "PostgreSQL cache hit ratio is {{ $value | humanizePercentage }}"
+          description: "Buffer cache hit ratio is below 90%. Consider increasing shared_buffers."

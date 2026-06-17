@@ -1,0 +1,98 @@
+pg_table_size:
+  query: |
+    SELECT
+      schemaname                                         AS schema,
+      relname                                            AS table,
+      pg_total_relation_size(relid)                      AS total_bytes,
+      pg_relation_size(relid)                            AS heap_bytes,
+      pg_total_relation_size(relid) - pg_relation_size(relid) AS index_bytes
+    FROM pg_catalog.pg_statio_user_tables
+    ORDER BY pg_total_relation_size(relid) DESC
+    LIMIT 20
+  metrics:
+    - schema:
+        usage: LABEL
+        description: "Schema name"
+    - table:
+        usage: LABEL
+        description: "Table name"
+    - total_bytes:
+        usage: GAUGE
+        description: "Total size of table including indexes (bytes)"
+    - heap_bytes:
+        usage: GAUGE
+        description: "Size of table heap (bytes)"
+    - index_bytes:
+        usage: GAUGE
+        description: "Size of all indexes on the table (bytes)"
+
+pg_long_running_queries:
+  query: |
+    SELECT
+      COUNT(*) AS count
+    FROM pg_stat_activity
+    WHERE state = 'active'
+      AND query_start < NOW() - INTERVAL '30 seconds'
+      AND query NOT LIKE '%pg_stat_activity%'
+  metrics:
+    - count:
+        usage: GAUGE
+        description: "Number of queries running longer than 30 seconds"
+
+pg_dead_tuples:
+  query: |
+    SELECT
+      schemaname AS schema,
+      relname    AS table,
+      n_dead_tup AS dead_tuples,
+      n_live_tup AS live_tuples,
+      CASE WHEN (n_live_tup + n_dead_tup) = 0 THEN 0
+           ELSE n_dead_tup::float / (n_live_tup + n_dead_tup) END AS dead_ratio
+    FROM pg_stat_user_tables
+    ORDER BY n_dead_tup DESC
+    LIMIT 10
+  metrics:
+    - schema:
+        usage: LABEL
+        description: "Schema name"
+    - table:
+        usage: LABEL
+        description: "Table name"
+    - dead_tuples:
+        usage: GAUGE
+        description: "Number of dead tuples (needs VACUUM)"
+    - live_tuples:
+        usage: GAUGE
+        description: "Number of live tuples"
+    - dead_ratio:
+        usage: GAUGE
+        description: "Ratio of dead to total tuples"
+
+pg_index_usage:
+  query: |
+    SELECT
+      schemaname               AS schema,
+      relname                  AS table,
+      indexrelname             AS index,
+      idx_scan                 AS scans,
+      idx_tup_read             AS tuples_read,
+      idx_tup_fetch            AS tuples_fetched
+    FROM pg_stat_user_indexes
+    ORDER BY idx_scan DESC
+    LIMIT 20
+  metrics:
+    - schema:
+        usage: LABEL
+    - table:
+        usage: LABEL
+    - index:
+        usage: LABEL
+    - scans:
+        usage: COUNTER
+        description: "Number of index scans"
+    - tuples_read:
+        usage: COUNTER
+        description: "Number of index entries returned by scans"
+    - tuples_fetched:
+        usage: COUNTER
+        description: "Number of live table rows fetched by simple index scans"

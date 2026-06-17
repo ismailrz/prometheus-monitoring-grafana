@@ -1,0 +1,118 @@
+groups:
+  - name: infrastructure
+    interval: 60s
+    rules:
+      # CPU
+      - alert: HighCPUUsage
+        expr: |
+          100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 10m
+        labels:
+          severity: warning
+          team:     infra
+        annotations:
+          summary:     "High CPU usage on {{ $labels.instance }} ({{ $value | humanize }}%)"
+          description: "CPU usage has been above 85% for 10 minutes."
+
+      # Memory
+      - alert: HighMemoryUsage
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.90
+        for: 5m
+        labels:
+          severity: critical
+          team:     infra
+        annotations:
+          summary:     "High memory usage ({{ $value | humanizePercentage }})"
+          description: "Available memory is below 10%."
+
+      # Disk
+      - alert: DiskSpaceLow
+        expr: |
+          (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|devtmpfs"})
+          / (node_filesystem_size_bytes{fstype!~"tmpfs|overlay|devtmpfs"})
+          < 0.15
+        for: 5m
+        labels:
+          severity: warning
+          team:     infra
+        annotations:
+          summary:     "Low disk space on {{ $labels.mountpoint }} ({{ $value | humanizePercentage }} free)"
+          description: "Less than 15% disk space remaining."
+
+      - alert: DiskSpaceCritical
+        expr: |
+          (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|devtmpfs"})
+          / (node_filesystem_size_bytes{fstype!~"tmpfs|overlay|devtmpfs"})
+          < 0.05
+        for: 2m
+        labels:
+          severity: critical
+          team:     infra
+        annotations:
+          summary:     "CRITICAL: Disk nearly full on {{ $labels.mountpoint }}"
+          description: "Less than 5% disk space remaining. Immediate action required."
+
+      # Container OOM
+      - alert: ContainerOOMKilled
+        expr: kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} > 0
+        for: 0m
+        labels:
+          severity: warning
+          team:     infra
+        annotations:
+          summary:     "Container {{ $labels.container }} was OOMKilled"
+          description: "A container was killed due to out-of-memory condition."
+
+  - name: containers
+    rules:
+      # Container high CPU
+      - alert: ContainerHighCPU
+        expr: |
+          sum by (name) (
+            rate(container_cpu_usage_seconds_total{name!=""}[5m])
+          ) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          team:     infra
+        annotations:
+          summary:     "Container {{ $labels.name }} is using high CPU ({{ $value | humanize }} cores)"
+          description: "Container CPU usage has been high for 10 minutes."
+
+      # Container high memory
+      - alert: ContainerHighMemory
+        expr: |
+          container_memory_usage_bytes{name!=""}
+          / container_spec_memory_limit_bytes{name!=""} > 0.90
+        for: 5m
+        labels:
+          severity: warning
+          team:     infra
+        annotations:
+          summary:     "Container {{ $labels.name }} memory at {{ $value | humanizePercentage }}"
+          description: "Container is using more than 90% of its memory limit."
+
+  - name: go_runtime
+    rules:
+      # Too many goroutines
+      - alert: HighGoroutineCount
+        expr: go_goroutines > 1000
+        for: 5m
+        labels:
+          severity: warning
+          team:     backend
+        annotations:
+          summary:     "High goroutine count ({{ $value }})"
+          description: "Possible goroutine leak — count exceeds 1000."
+
+      # Heap too large
+      - alert: HighHeapMemory
+        expr: go_memstats_heap_alloc_bytes > 500 * 1024 * 1024
+        for: 5m
+        labels:
+          severity: warning
+          team:     backend
+        annotations:
+          summary:     "Go heap is {{ $value | humanize1024 }}B"
+          description: "Go heap allocation exceeds 500 MiB."

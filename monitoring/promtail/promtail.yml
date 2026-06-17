@@ -1,0 +1,68 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: warn
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+    batchwait: 1s
+    batchsize: 102400
+
+scrape_configs:
+  # Discover all running Docker containers via the Docker socket.
+  # Each container gets labels: container, image, stream (stdout/stderr).
+  - job_name: docker-containers
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 10s
+        filters:
+          - name:   status
+            values: ["running"]
+
+    relabel_configs:
+      # Container name (strip leading /)
+      - source_labels: [__meta_docker_container_name]
+        regex:         '/(.*)'
+        target_label:  container
+
+      # stdout / stderr stream label
+      - source_labels: [__meta_docker_container_log_stream]
+        target_label:  stream
+
+      # Docker image tag
+      - source_labels: [__meta_docker_container_image_name]
+        target_label:  image
+
+      # Compose service name (set by docker-compose as label)
+      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
+        target_label:  service
+
+    pipeline_stages:
+      # Parse Docker JSON log wrapper to extract the actual log line
+      - docker: {}
+
+      # Detect log level from Go backend structured logs (key=value format)
+      # Example: time=2024-01-01T00:00:00Z level=info method=GET ...
+      - regex:
+          expression: '.*level=(?P<level>\w+).*'
+
+      # Also detect JSON-style level fields from other services
+      - json:
+          expressions:
+            json_level: level
+          drop_malformed: true
+
+      - template:
+          source:   level
+          template: '{{ if .level }}{{ .level }}{{ else if .json_level }}{{ .json_level }}{{ else }}info{{ end }}'
+
+      - labels:
+          level: ""
+
+      # Drop noisy health-check logs to keep Loki storage lean
+      - drop:
+          expression: '.*(GET /health|GET /ready|GET /nginx_status).*'
+          drop_counter_reason: health_check_noise

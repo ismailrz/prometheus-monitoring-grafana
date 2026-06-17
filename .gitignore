@@ -1,0 +1,25 @@
+.DS_Store
+.env.local
+.env.production
+*.log
+
+# Go
+backend/vendor/
+backend/*.exe
+backend/*.exe~
+backend/*.dll
+backend/*.so
+backend/*.dylib
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.cache
+
+# Docker
+*.tar
+
+# IDE
+.vscode/
+.idea/
+*.swp
