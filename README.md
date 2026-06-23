@@ -231,6 +231,7 @@ Edit `terraform.tfvars`:
 ```hcl
 project       = "prom-stack"
 aws_region    = "us-east-1"
+aws_profile   = "default"           # AWS CLI profile from ~/.aws/credentials
 instance_type = "t3.large"          # 2 vCPU / 8 GB RAM — recommended
 
 operator_cidr = "0.0.0.0/0"        # restrict to your IP for production:

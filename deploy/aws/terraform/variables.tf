@@ -1,3 +1,9 @@
+variable "aws_profile" {
+  description = "AWS CLI named profile to use for authentication (from ~/.aws/credentials or ~/.aws/config)"
+  type        = string
+  default     = "default"
+}
+
 variable "project" {
   description = "Project name — used as a prefix for all resource names"
   type        = string
