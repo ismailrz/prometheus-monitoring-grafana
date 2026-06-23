@@ -9,24 +9,25 @@ A production-grade observability stack for a three-tier application built with *
 1. [Architecture](#architecture)
 2. [Stack at a Glance](#stack-at-a-glance)
 3. [Prerequisites](#prerequisites)
-4. [Quick Start](#quick-start)
-5. [Project Structure](#project-structure)
-6. [Application Layer](#application-layer)
+4. [Quick Start — Local](#quick-start--local)
+5. [Deploy to AWS EC2](#deploy-to-aws-ec2)
+6. [Project Structure](#project-structure)
+7. [Application Layer](#application-layer)
    - [Frontend](#frontend-react--nginx)
    - [Backend](#backend-go)
    - [Database](#database-postgresql)
-7. [Monitoring Layer](#monitoring-layer)
+8. [Monitoring Layer](#monitoring-layer)
    - [Prometheus](#prometheus)
    - [Grafana Dashboards](#grafana-dashboards)
    - [Loki & Promtail](#loki--promtail)
    - [AlertManager](#alertmanager)
-8. [Exporters](#exporters)
-9. [API Reference](#api-reference)
-10. [Metrics Reference](#metrics-reference)
-11. [Alert Rules](#alert-rules)
-12. [Load Testing](#load-testing)
-13. [Makefile Commands](#makefile-commands)
-14. [Troubleshooting](#troubleshooting)
+9. [Exporters](#exporters)
+10. [API Reference](#api-reference)
+11. [Metrics Reference](#metrics-reference)
+12. [Alert Rules](#alert-rules)
+13. [Load Testing](#load-testing)
+14. [Makefile Commands](#makefile-commands)
+15. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -115,7 +116,7 @@ A production-grade observability stack for a three-tier application built with *
 
 ---
 
-## Quick Start
+## Quick Start — Local
 
 ```bash
 # 1. Clone / enter the directory
@@ -152,6 +153,219 @@ open http://localhost:3001   # admin / admin123
 | http://localhost:8081 | cAdvisor container view |
 | http://localhost:9090/targets | Prometheus scrape targets |
 | http://localhost:9090/alerts | Prometheus active alerts |
+
+---
+
+## Deploy to AWS EC2
+
+The full stack runs on a **single EC2 instance** using Docker Compose — a direct lift-and-shift of the local setup. All deployment files live in `deploy/aws/`.
+
+### Architecture on AWS
+
+```
+                        Internet
+                           │
+                    ┌──────▼──────┐
+                    │  Elastic IP │
+                    └──────┬──────┘
+                           │ :80 / :443
+                    ┌──────▼──────────────────────────────┐
+                    │  EC2  t3.large  (Ubuntu 22.04)       │
+                    │                                      │
+                    │  ┌──────────────────────────────┐    │
+                    │  │  Host nginx  (port 80)        │    │
+                    │  │  /           → frontend :3000 │    │
+                    │  │  /api/       → backend  :8080 │    │
+                    │  │  /grafana/   → grafana  :3001 │◄── basic auth
+                    │  │  /prometheus/→ prom     :9090 │◄── basic auth
+                    │  │  /alertmgr/  → alertmgr :9093 │◄── basic auth
+                    │  └──────────────────────────────┘    │
+                    │  Docker containers (all internal)     │
+                    └───────────────────┬─────────────────-┘
+                                        │ :5432
+                    ┌───────────────────▼──────────────┐
+                    │  RDS PostgreSQL  (optional)       │
+                    │  private subnet — never public    │
+                    └──────────────────────────────────┘
+```
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `deploy/aws/terraform/main.tf` | VPC, EC2, RDS, IAM, SSM Parameters |
+| `deploy/aws/terraform/variables.tf` | All input variables with descriptions |
+| `deploy/aws/terraform/outputs.tf` | Public IP, SSH command, service URLs |
+| `deploy/aws/terraform/terraform.tfvars.example` | Template — copy to `terraform.tfvars` |
+| `deploy/aws/ec2-userdata.sh` | Bootstrap: installs Docker, clones repo, starts stack |
+| `deploy/aws/docker-compose.prod.yml` | Production overrides (no host ports, resource limits) |
+| `deploy/aws/nginx/monitoring-proxy.conf` | Host nginx reverse proxy with basic auth |
+
+### Prerequisites
+
+| Tool | Install |
+|------|---------|
+| [Terraform](https://developer.hashicorp.com/terraform/install) ≥ 1.6 | `brew install hashicorp/tap/terraform` |
+| [AWS CLI](https://aws.amazon.com/cli/) v2 | `brew install awscli` |
+| SSH key pair | `ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa` |
+
+```bash
+# Configure AWS credentials
+aws configure
+# AWS Access Key ID:     <your key>
+# AWS Secret Access Key: <your secret>
+# Default region:        us-east-1
+# Default output format: json
+```
+
+### Step 1 — Configure Terraform variables
+
+```bash
+cd deploy/aws/terraform
+
+cp terraform.tfvars.example terraform.tfvars
+```
+
+Edit `terraform.tfvars`:
+
+```hcl
+project       = "prom-stack"
+aws_region    = "us-east-1"
+instance_type = "t3.large"          # 2 vCPU / 8 GB RAM — recommended
+
+operator_cidr = "YOUR_IP/32"        # run: curl -s ifconfig.me
+                                    # SSH is restricted to this IP only
+
+ssh_public_key_path = "~/.ssh/id_rsa.pub"
+
+postgres_password = "StrongPassword123!"
+grafana_password  = "AdminPassword456!"
+
+use_rds = false   # true = RDS PostgreSQL (~+$15/mo, managed backups)
+```
+
+> `terraform.tfvars` is in `.gitignore` — never commit it.
+
+### Step 2 — Deploy
+
+```bash
+terraform init
+terraform plan      # review what will be created
+terraform apply     # type "yes" — takes ~3 min
+```
+
+Terraform provisions: VPC · subnets · security groups · EC2 · Elastic IP · IAM role · SSM parameters · (optional) RDS.
+
+The EC2 instance runs `ec2-userdata.sh` automatically on first boot:
+1. Installs Docker Engine + Docker Compose plugin
+2. Clones `https://github.com/ismailrz/prometheus-monitoring-grafana`
+3. Writes `.env` from the injected credentials
+4. Starts all containers with the production compose override
+5. Configures host nginx as a reverse proxy with basic auth
+
+**First boot takes ~5–8 minutes.** Watch progress:
+
+```bash
+ssh ubuntu@$(terraform output -raw instance_public_ip) "tail -f /var/log/userdata.log"
+```
+
+### Step 3 — Access the stack
+
+```bash
+terraform output instance_public_ip   # get the IP
+```
+
+| URL | Service | Auth |
+|-----|---------|------|
+| `http://<IP>` | React frontend | — |
+| `http://<IP>/api/v1/products` | Backend API | — |
+| `http://<IP>/grafana/` | Grafana dashboards | admin / *grafana_password* |
+| `http://<IP>/prometheus/` | Prometheus UI | admin / *grafana_password* |
+| `http://<IP>/alertmanager/` | AlertManager | admin / *grafana_password* |
+
+### Deploy without Terraform (manual EC2)
+
+If the EC2 instance is already running and you want to start the stack manually:
+
+```bash
+# SSH into your instance
+ssh ubuntu@<IP>
+
+# Install Docker (if not already installed)
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+  https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update -y
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo systemctl enable --now docker
+sudo usermod -aG docker ubuntu
+
+# Re-login so the docker group takes effect
+newgrp docker
+
+# Clone the repo
+git clone https://github.com/ismailrz/prometheus-monitoring-grafana.git
+cd prometheus-monitoring-grafana
+
+# Create .env
+cat > .env <<EOF
+POSTGRES_DB=appdb
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=your_strong_password
+GRAFANA_ADMIN_USER=admin
+GRAFANA_ADMIN_PASSWORD=your_strong_password
+EOF
+
+# Start the stack
+docker compose up -d
+
+# Check all containers are healthy
+docker compose ps
+```
+
+### Update after a code push
+
+```bash
+ssh ubuntu@<IP>
+cd ~/prometheus-monitoring-grafana
+
+git pull
+docker compose up -d --build
+```
+
+### Cost estimate
+
+| Configuration | Monthly cost (us-east-1) |
+|---------------|--------------------------|
+| t3.medium (4 GB) + 40 GB EBS | ~$33 |
+| t3.large (8 GB) + 40 GB EBS | ~$63 |
+| t3.large + RDS db.t3.micro | ~$78 |
+
+Use a **1-year Reserved Instance** to cut EC2 cost by ~40%.
+
+### Add HTTPS (recommended)
+
+Point a domain at your Elastic IP, then:
+
+```bash
+ssh ubuntu@<IP>
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d yourdomain.com
+```
+
+Certbot auto-configures nginx for TLS and sets up auto-renewal.
+
+### Teardown
+
+```bash
+cd deploy/aws/terraform
+terraform destroy   # removes all AWS resources
+```
 
 ---
 
