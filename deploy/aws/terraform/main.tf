@@ -174,9 +174,8 @@ data "aws_ami" "ubuntu" {
 }
 
 resource "aws_key_pair" "main" {
-  key_name = "${var.project}-key"
-  # Strip comment — only pass "<type> <key-material>"; avoids 2048-byte limit errors
-  public_key = join(" ", slice(split(" ", trimspace(file(var.ssh_public_key_path))), 0, 2))
+  key_name   = "${var.project}-key"
+  public_key = file(pathexpand(var.ssh_public_key_path))
 }
 
 resource "aws_instance" "app" {

@@ -29,9 +29,9 @@ variable "operator_cidr" {
 }
 
 variable "ssh_public_key_path" {
-  description = "Local path to your SSH public key file"
+  description = "Local path to your SSH public key file. Generate a dedicated key: ssh-keygen -t rsa -b 2048 -f ~/.ssh/prom-stack -N \"\""
   type        = string
-  default     = "~/.ssh/id_rsa.pub"
+  default     = "~/.ssh/prom-stack.pub"
 }
 
 variable "postgres_password" {
