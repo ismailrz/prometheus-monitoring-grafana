@@ -23,9 +23,9 @@ variable "instance_type" {
 }
 
 variable "operator_cidr" {
-  description = "Your public IP in CIDR notation — SSH access is restricted to this address. Get it with: curl -s ifconfig.me"
+  description = "Your public IP in CIDR notation for SSH access. Use 0.0.0.0/0 to allow all (practice only). Get your IP: curl -s ifconfig.me"
   type        = string
-  # example: "203.0.113.42/32"
+  default     = "0.0.0.0/0"
 }
 
 variable "ssh_public_key_path" {
