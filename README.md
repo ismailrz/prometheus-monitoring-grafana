@@ -207,7 +207,7 @@ The full stack runs on a **single EC2 instance** using Docker Compose — a dire
 |------|---------|
 | [Terraform](https://developer.hashicorp.com/terraform/install) ≥ 1.6 | `brew install hashicorp/tap/terraform` |
 | [AWS CLI](https://aws.amazon.com/cli/) v2 | `brew install awscli` |
-| SSH key pair | `ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa` |
+| AWS Key Pair | EC2 → Key Pairs → **Create key pair** (download the `.pem` file) |
 
 ```bash
 # Configure AWS credentials
@@ -233,15 +233,18 @@ project       = "prom-stack"
 aws_region    = "us-east-1"
 instance_type = "t3.large"          # 2 vCPU / 8 GB RAM — recommended
 
-operator_cidr = "YOUR_IP/32"        # run: curl -s ifconfig.me
-                                    # SSH is restricted to this IP only
+operator_cidr = "0.0.0.0/0"        # restrict to your IP for production:
+                                    # curl -s ifconfig.me → use <your-ip>/32
 
-ssh_public_key_path = "~/.ssh/id_rsa.pub"
+# Name of your existing AWS Key Pair (EC2 → Key Pairs in the AWS console)
+key_pair_name = "your-key-pair-name"
 
 postgres_password = "StrongPassword123!"
 grafana_password  = "AdminPassword456!"
 
-use_rds = false   # true = RDS PostgreSQL (~+$15/mo, managed backups)
+use_rds              = false  # true = RDS PostgreSQL (~+$15/mo, managed backups)
+create_iam_role      = false  # true = IAM role for SSM + CloudWatch (requires iam:CreateRole)
+store_secrets_in_ssm = false  # true = store passwords in SSM Parameter Store (requires ssm:PutParameter)
 ```
 
 > `terraform.tfvars` is in `.gitignore` — never commit it.
@@ -254,7 +257,7 @@ terraform plan      # review what will be created
 terraform apply     # type "yes" — takes ~3 min
 ```
 
-Terraform provisions: VPC · subnets · security groups · EC2 · Elastic IP · IAM role · SSM parameters · (optional) RDS.
+Terraform provisions: VPC · subnets · security groups · EC2 · Elastic IP · (optional IAM role, SSM parameters, RDS).
 
 The EC2 instance runs `ec2-userdata.sh` automatically on first boot:
 1. Installs Docker Engine + Docker Compose plugin
@@ -266,7 +269,7 @@ The EC2 instance runs `ec2-userdata.sh` automatically on first boot:
 **First boot takes ~5–8 minutes.** Watch progress:
 
 ```bash
-ssh ubuntu@$(terraform output -raw instance_public_ip) "tail -f /var/log/userdata.log"
+ssh -i ~/Downloads/your-key-pair-name.pem ubuntu@$(terraform output -raw instance_public_ip) "tail -f /var/log/userdata.log"
 ```
 
 ### Step 3 — Access the stack
@@ -288,8 +291,8 @@ terraform output instance_public_ip   # get the IP
 If the EC2 instance is already running and you want to start the stack manually:
 
 ```bash
-# SSH into your instance
-ssh ubuntu@<IP>
+# SSH into your instance using the .pem key downloaded from the AWS console
+ssh -i ~/Downloads/your-key-pair-name.pem ubuntu@<IP>
 
 # Install Docker (if not already installed)
 sudo install -m 0755 -d /etc/apt/keyrings
@@ -331,7 +334,7 @@ docker compose ps
 ### Update after a code push
 
 ```bash
-ssh ubuntu@<IP>
+ssh -i ~/Downloads/your-key-pair-name.pem ubuntu@<IP>
 cd ~/prometheus-monitoring-grafana
 
 git pull
