@@ -28,10 +28,9 @@ variable "operator_cidr" {
   default     = "0.0.0.0/0"
 }
 
-variable "ssh_public_key_path" {
-  description = "Local path to your SSH public key file. Generate a dedicated key: ssh-keygen -t rsa -b 2048 -f ~/.ssh/prom-stack -N \"\""
+variable "key_pair_name" {
+  description = "Name of an existing AWS Key Pair to attach to the EC2 instance (created in EC2 → Key Pairs in the AWS console)"
   type        = string
-  default     = "~/.ssh/prom-stack.pub"
 }
 
 variable "postgres_password" {

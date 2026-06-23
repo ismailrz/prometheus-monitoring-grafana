@@ -173,16 +173,11 @@ data "aws_ami" "ubuntu" {
   }
 }
 
-resource "aws_key_pair" "main" {
-  key_name   = "${var.project}-key"
-  public_key = file(pathexpand(var.ssh_public_key_path))
-}
-
 resource "aws_instance" "app" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
   subnet_id              = aws_subnet.public.id
-  key_name               = aws_key_pair.main.key_name
+  key_name               = var.key_pair_name
   vpc_security_group_ids = [aws_security_group.ec2.id]
   iam_instance_profile   = var.create_iam_role ? aws_iam_instance_profile.ec2[0].name : null
 

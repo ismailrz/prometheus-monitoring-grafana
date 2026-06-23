@@ -9,8 +9,8 @@ output "instance_id" {
 }
 
 output "ssh_command" {
-  description = "SSH command to connect to the instance"
-  value       = "ssh -i ~/.ssh/id_rsa ubuntu@${aws_eip.app.public_ip}"
+  description = "SSH command to connect to the instance (use your downloaded .pem file)"
+  value       = "ssh -i ~/Downloads/${var.key_pair_name}.pem ubuntu@${aws_eip.app.public_ip}"
 }
 
 output "app_url" {
