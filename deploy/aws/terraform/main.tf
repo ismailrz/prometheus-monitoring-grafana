@@ -174,8 +174,9 @@ data "aws_ami" "ubuntu" {
 }
 
 resource "aws_key_pair" "main" {
-  key_name   = "${var.project}-key"
-  public_key = file(var.ssh_public_key_path)
+  key_name = "${var.project}-key"
+  # Strip comment — only pass "<type> <key-material>"; avoids 2048-byte limit errors
+  public_key = join(" ", slice(split(" ", trimspace(file(var.ssh_public_key_path))), 0, 2))
 }
 
 resource "aws_instance" "app" {
@@ -184,7 +185,7 @@ resource "aws_instance" "app" {
   subnet_id              = aws_subnet.public.id
   key_name               = aws_key_pair.main.key_name
   vpc_security_group_ids = [aws_security_group.ec2.id]
-  iam_instance_profile   = aws_iam_instance_profile.ec2.name
+  iam_instance_profile   = var.create_iam_role ? aws_iam_instance_profile.ec2[0].name : null
 
   root_block_device {
     volume_size           = 40    # GB — holds Docker images + Prometheus/Loki data
@@ -218,6 +219,7 @@ resource "aws_eip" "app" {
 # ─────────────────────────────────────────────────
 
 resource "aws_iam_role" "ec2" {
+  count = var.create_iam_role ? 1 : 0
   name = "${var.project}-ec2-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -230,8 +232,9 @@ resource "aws_iam_role" "ec2" {
 }
 
 resource "aws_iam_role_policy" "ssm_read" {
+  count = var.create_iam_role ? 1 : 0
   name = "ssm-read"
-  role = aws_iam_role.ec2.id
+  role = aws_iam_role.ec2[0].id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -244,13 +247,15 @@ resource "aws_iam_role_policy" "ssm_read" {
 
 # CloudWatch logs (optional — useful for centralised log shipping)
 resource "aws_iam_role_policy_attachment" "cloudwatch" {
-  role       = aws_iam_role.ec2.name
+  count      = var.create_iam_role ? 1 : 0
+  role       = aws_iam_role.ec2[0].name
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
 }
 
 resource "aws_iam_instance_profile" "ec2" {
+  count = var.create_iam_role ? 1 : 0
   name = "${var.project}-ec2-profile"
-  role = aws_iam_role.ec2.name
+  role = aws_iam_role.ec2[0].name
 }
 
 # ─────────────────────────────────────────────────
@@ -258,6 +263,7 @@ resource "aws_iam_instance_profile" "ec2" {
 # ─────────────────────────────────────────────────
 
 resource "aws_db_subnet_group" "main" {
+  count      = var.use_rds ? 1 : 0
   name       = "${var.project}-db-subnet-group"
   subnet_ids = [aws_subnet.private_a.id, aws_subnet.private_b.id]
   tags       = { Name = "${var.project}-db-subnet-group" }
@@ -278,7 +284,7 @@ resource "aws_db_instance" "postgres" {
   username = "postgres"
   password = var.postgres_password
 
-  db_subnet_group_name   = aws_db_subnet_group.main.name
+  db_subnet_group_name   = aws_db_subnet_group.main[0].name
   vpc_security_group_ids = [aws_security_group.rds.id]
 
   # Backups
@@ -302,12 +308,14 @@ resource "aws_db_instance" "postgres" {
 # ─────────────────────────────────────────────────
 
 resource "aws_ssm_parameter" "postgres_password" {
+  count = var.store_secrets_in_ssm ? 1 : 0
   name  = "/${var.project}/postgres_password"
   type  = "SecureString"
   value = var.postgres_password
 }
 
 resource "aws_ssm_parameter" "grafana_password" {
+  count = var.store_secrets_in_ssm ? 1 : 0
   name  = "/${var.project}/grafana_password"
   type  = "SecureString"
   value = var.grafana_password

@@ -51,3 +51,15 @@ variable "use_rds" {
   type        = bool
   default     = false
 }
+
+variable "create_iam_role" {
+  description = "Set to true to create an IAM role for the EC2 instance (SSM + CloudWatch access). Requires iam:CreateRole permission. Set false for restricted AWS accounts."
+  type        = bool
+  default     = false
+}
+
+variable "store_secrets_in_ssm" {
+  description = "Set to true to store passwords in SSM Parameter Store. Requires ssm:PutParameter permission. Set false for restricted AWS accounts."
+  type        = bool
+  default     = false
+}
